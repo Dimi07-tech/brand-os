@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://brandos:brandos@localhost:5432/brandos
+      REDIS_URL: redis://localhost:6379
+      WEB_ORIGIN: http://localhost:3000
+      PWNED_PASSWORD_CHECK: "false"
+      FILE_SIGNING_SECRET: ci-only-secret-0123456789abcdefghijklmnop
+      CHROMIUM_PATH: /usr/bin/google-chrome
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: brandos
+          POSTGRES_PASSWORD: brandos
+          POSTGRES_DB: brandos
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U brandos"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # Conversion CMJN des PDF d'impression (RG-50)
+      - run: sudo apt-get update && sudo apt-get install -y ghostscript
+      - run: npm ci
+      - run: npm run generate -w @brand-os/db
+      - run: npm audit --audit-level=high --omit=dev
+      - run: npm run migrate:deploy -w @brand-os/db
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build

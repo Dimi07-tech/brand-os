@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.next/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Prisma : client généré
+packages/db/src/generated/
+
+# Secrets (RG sécurité §9.1 : aucune clé dans le code)
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+.dev/
+
+# Documentation interne (cahier des charges) : conservée en local uniquement
+docs/

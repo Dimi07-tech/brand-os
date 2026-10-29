@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+/* Polices variables de l'interface (licence OFL, voir public/fonts). */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/bricolage-grotesque-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/bricolage-grotesque-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/*
+ * Jetons de l'interface Brand OS — thème clair unique, tons chauds.
+ * Contrastes texte/fond ≥ 4,5:1 (WCAG AA, §5.4).
+ */
+:root {
+  --background: #fbf7f1;
+  --surface: #ffffff;
+  --foreground: #1f1a16;
+  --muted: #5f564d;
+  --border: #ece3d6;
+  --accent: #c2410c;
+  --accent-hover: #9a3412;
+  --accent-foreground: #ffffff;
+  --accent-soft: #fff1e6;
+  --danger: #b91c1c;
+  --danger-soft: #fef2f2;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  /* Couleurs d'ambiance (dégradés décoratifs de la vitrine) */
+  --sun: #f59e0b;
+  --leaf: #0f766e;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-sun: var(--sun);
+  --color-leaf: var(--leaf);
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* --- Animations ------------------------------------------------------------
+ * Uniquement transform et opacity (calculées par le GPU) : fluides à toutes les
+ * résolutions. Le contenu reste visible si l'animation n'est pas prise en charge.
+ */
+
+@keyframes progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  70% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--tilt, 0deg)); }
+  50% { transform: translate3d(0, -12px, 0) rotate(var(--tilt, 0deg)); }
+}
+
+@keyframes marquee {
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes blob {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(4%, -6%, 0) scale(1.08); }
+  66% { transform: translate3d(-5%, 4%, 0) scale(0.95); }
+}
+
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes caret {
+  50% { opacity: 0; }
+}
+
+.animate-fade-up { animation: fade-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-fade-in { animation: fade-in 0.6s ease-out both; }
+.animate-pop { animation: pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-blob { animation: blob 18s ease-in-out infinite; }
+.animate-marquee { animation: marquee var(--duration, 40s) linear infinite; }
+.animate-caret { animation: caret 1s steps(1) infinite; }
+
+/* Apparition au défilement, sans JavaScript (navigateurs récents). */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: fade-up linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 45%;
+  }
+}
+
+/* Accessibilité : aucune animation si l'utilisateur l'a demandé au système. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Ouverture animée des questions de la FAQ (navigateurs récents) */
+:root {
+  interpolate-size: allow-keywords;
+}
+details::details-content {
+  height: 0;
+  overflow: clip;
+  transition: height 0.35s cubic-bezier(0.22, 1, 0.36, 1), content-visibility 0.35s allow-discrete;
+}
+details[open]::details-content {
+  height: auto;
+}

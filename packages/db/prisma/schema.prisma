@@ -1,0 +1,690 @@
+// Modèle de données Brand OS — cahier des charges v2.0, §7.2
+//
+// Règles transverses :
+// - chaque table métier porte organization_id (isolation, §9.1) ;
+// - montants en unités mineures entières (BigInt) + devise : le FCFA n'a pas de
+//   décimales, l'EUR/USD en ont 2. Jamais de nombre flottant ;
+// - les colonnes JSON (compositions, modèles, instantanés) portent une
+//   schemaVersion pour rester lisibles après évolution.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Énumérations
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  LOCKED
+  PENDING_DELETION
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  DESIGNER
+  EDITOR
+  ACCOUNTANT
+  VIEWER
+  EXTERNAL_CLIENT
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  REVOKED
+}
+
+enum Currency {
+  XOF
+  EUR
+  USD
+}
+
+enum BrandAssetType {
+  LOGO
+  ICON
+  PATTERN
+  PHOTO
+  FONT
+  FILE
+}
+
+enum LogoVariant {
+  COLOR
+  MONOCHROME
+  LIGHT
+  DARK
+  ICON_ONLY
+  HORIZONTAL
+  VERTICAL
+}
+
+enum TemplateCategory {
+  BUSINESS_CARD
+  INVOICE
+  QUOTE
+  BRAND_GUIDELINES
+  SOCIAL_POST
+  EMAIL_SIGNATURE
+  POSTER
+}
+
+enum BusinessDocumentType {
+  INVOICE
+  QUOTE
+  CREDIT_NOTE
+}
+
+enum BusinessDocumentStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  CANCELLED
+  ACCEPTED
+  REJECTED
+}
+
+enum Plan {
+  FREE
+  STARTER
+  PRO
+  BUSINESS
+  AGENCY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING_RENEWAL
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  MTN_MOMO
+  MOOV_MONEY
+  CELTIIS_CASH
+  CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum UsageType {
+  AI_GENERATION
+  HD_EXPORT
+  BUSINESS_DOCUMENT
+  STORAGE_BYTES
+}
+
+enum AIGenerationType {
+  BRIEF_ANALYSIS
+  LOGO
+  PALETTE
+  SLOGAN
+  GUIDELINES_TEXT
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+}
+
+enum ExportType {
+  LOGO_PACK
+  GUIDELINES_PDF
+  BUSINESS_CARD_PDF
+  BUSINESS_DOCUMENT_PDF
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  READ
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Comptes et organisations (§4.1, §4.2)
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String     @id @default(uuid(7)) @db.Uuid
+  email           String     @unique
+  emailVerifiedAt DateTime?
+  name            String
+  passwordHash    String // Argon2id (§9.1)
+  phone           String?
+  avatarUrl       String?
+  locale          String     @default("fr")
+  timezone        String     @default("Africa/Porto-Novo")
+  status          UserStatus @default(PENDING_VERIFICATION)
+  // Préférences de notification (§4.1)
+  notificationPrefs Json     @default("{}")
+  isPlatformAdmin Boolean    @default(false)
+  // RG-02 : verrouillage temporaire après 5 échecs en 15 minutes
+  failedLoginAttempts Int    @default(0)
+  lastFailedLoginAt DateTime?
+  lockedUntil     DateTime?
+  deletionRequestedAt DateTime? // RG-04 : effacement après 30 jours
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  memberships   Membership[]
+  sessions      Session[]
+  tokens        VerificationToken[]
+  notifications Notification[]
+}
+
+model Session {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  userAgent  String?
+  ipAddress  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum TokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+// Jetons à usage unique envoyés par e-mail (US-02, US-03, RG-03).
+// Seule l'empreinte SHA-256 est stockée.
+model VerificationToken {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  userId    String       @db.Uuid
+  purpose   TokenPurpose
+  tokenHash String       @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+}
+
+model Organization {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String
+  sector      String
+  country     String   @default("BJ")
+  city        String?
+  address     String?
+  phone       String?
+  email       String?
+  website     String?
+  rccm        String? // Registre du commerce
+  ifu         String? // Identifiant fiscal unique
+  taxRegime   String?
+  vatEnabled  Boolean  @default(true) // RG-61
+  currency    Currency @default(XOF)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships       Membership[]
+  brands            Brand[]
+  templates         Template[]
+  designs           Design[]
+  clients           Client[]
+  products          Product[]
+  businessDocuments BusinessDocument[]
+  sequences         DocumentSequence[]
+  subscription      Subscription?
+  usageRecords      UsageRecord[]
+  aiGenerations     AIGeneration[]
+  exports           Export[]
+  auditLogs         AuditLog[]
+}
+
+model Membership {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  userId         String           @db.Uuid
+  organizationId String           @db.Uuid
+  role           Role
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Marque (§4.3, §4.4)
+// ---------------------------------------------------------------------------
+
+model Brand {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  organizationId   String   @db.Uuid
+  name             String
+  slogan           String?
+  description      String?
+  mission          String?
+  values           String[]
+  // Réponses brutes du questionnaire créatif en 6 étapes (US-20)
+  brief            Json?
+  // Logo retenu : spécification structurée (LogoSpec de @brand-os/shared), le SVG
+  // et ses variantes en sont dérivés (§1.4, US-24)
+  logo             Json?
+  // Textes de la charte graphique, corrigés par l'utilisateur avant l'export (US-41)
+  guidelines       Json?
+  activeVersionNum Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions     BrandVersion[]
+  assets       BrandAsset[]
+  palettes     ColorPalette[]
+  typographies Typography[]
+  designs      Design[]
+  exports      Export[]
+
+  @@index([organizationId])
+}
+
+model BrandVersion {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @db.Uuid
+  brandId        String   @db.Uuid
+  number         Int
+  schemaVersion  Int      @default(1)
+  snapshot       Json // Instantané complet : logos, palette, polices
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, number])
+  @@index([organizationId])
+}
+
+model BrandAsset {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  organizationId String          @db.Uuid
+  brandId        String          @db.Uuid
+  type           BrandAssetType
+  logoVariant    LogoVariant?
+  storageKey     String // Clé dans le stockage objet, jamais d'URL publique
+  format         String // svg, png, jpg, pdf, ttf…
+  mimeType       String
+  sizeBytes      BigInt
+  isVector       Boolean         @default(false) // RG-23
+  metadata       Json            @default("{}")
+  version        Int             @default(1)
+  createdById    String?         @db.Uuid
+  createdAt      DateTime        @default(now())
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([brandId, type])
+}
+
+model ColorPalette {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @db.Uuid
+  brandId        String   @db.Uuid
+  name           String?
+  isActive       Boolean  @default(false)
+  // [{ role: primary|secondary|accent|background|text, hex, rgb, cmyk, name }]
+  // RG-20 (rôles minimum) et RG-21 (HEX + RGB + CMJN)
+  colors         Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([brandId])
+}
+
+model Typography {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @db.Uuid
+  brandId        String   @db.Uuid
+  headingFont    String // Google Fonts uniquement au MVP (RG-24)
+  bodyFont       String
+  rules          Json     @default("{}")
+  isActive       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([brandId])
+}
+
+// ---------------------------------------------------------------------------
+// Modèles et supports (§4.5 à §4.7)
+// ---------------------------------------------------------------------------
+
+model Template {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  organizationId String?          @db.Uuid // null = modèle global Brand OS
+  category       TemplateCategory
+  sector         String?
+  name           String
+  format         Json // { widthMm, heightMm, bleedMm, safeMm, dpi } ou px
+  schemaVersion  Int              @default(1)
+  schema         Json
+  version        Int              @default(1)
+  thumbnailKey   String?
+  isPublished    Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  designs      Design[]
+
+  @@index([organizationId])
+  @@index([category, sector])
+}
+
+model Design {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @db.Uuid
+  brandId        String   @db.Uuid
+  templateId     String?  @db.Uuid
+  name           String
+  schemaVersion  Int      @default(1)
+  composition    Json
+  version        Int      @default(1) // Détection de conflit entre onglets (RG-40)
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  brand        Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  template     Template?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  exports      Export[]
+
+  @@index([organizationId])
+  @@index([brandId])
+}
+
+// ---------------------------------------------------------------------------
+// Factures et devis (§4.8)
+// ---------------------------------------------------------------------------
+
+model Client {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  ifu            String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    BusinessDocument[]
+
+  @@index([organizationId])
+}
+
+model Product {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  organizationId   String   @db.Uuid
+  name             String
+  description      String?
+  unitPriceMinor   BigInt
+  currency         Currency @default(XOF)
+  vatRateBps       Int      @default(1800) // 18 % = 1800 points de base (RG-61)
+  unit             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model BusinessDocument {
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  organizationId String                 @db.Uuid
+  clientId       String?                @db.Uuid
+  type           BusinessDocumentType
+  status         BusinessDocumentStatus @default(DRAFT)
+  // Attribué à l'émission uniquement : FAC-2026-0001 / DEV-2026-0001 (RG-62)
+  number         String?
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  currency       Currency               @default(XOF)
+  // Lignes : [{ label, quantity, unitPriceMinor, discountBps, vatRateBps }]
+  schemaVersion  Int                    @default(1)
+  lines          Json
+  discountMinor  BigInt                 @default(0) // Remises cumulées
+  subtotalMinor  BigInt                 @default(0) // Total HT
+  vatMinor       BigInt                 @default(0)
+  totalMinor     BigInt                 @default(0) // Total TTC
+  paymentTerms   String?
+  notes          String?
+  // Instantané de l'émetteur et de la marque au moment de l'émission (RG-31, RG-63)
+  issuerSnapshot Json?
+  clientSnapshot Json?
+  brandSnapshot  Json?
+  pdfStorageKey  String?
+  // Facture d'avoir : document corrigé (RG-63)
+  correctsId     String?                @db.Uuid
+  createdById    String?                @db.Uuid
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  corrects     BusinessDocument?  @relation("CreditNote", fields: [correctsId], references: [id])
+  creditNotes  BusinessDocument[] @relation("CreditNote")
+  exports      Export[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, type, status])
+}
+
+// Garantit une numérotation continue, sans trou ni doublon (RG-62).
+// Incrément sous verrou de ligne (SELECT … FOR UPDATE) dans la transaction d'émission.
+model DocumentSequence {
+  organizationId String               @db.Uuid
+  type           BusinessDocumentType
+  year           Int
+  lastNumber     Int                  @default(0)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, type, year])
+}
+
+// ---------------------------------------------------------------------------
+// Abonnements et paiements (§6)
+// ---------------------------------------------------------------------------
+
+model Subscription {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  organizationId    String             @unique @db.Uuid
+  plan              Plan               @default(FREE)
+  status            SubscriptionStatus @default(ACTIVE)
+  billingPeriod     String             @default("monthly") // monthly | yearly
+  currentPeriodStart DateTime          @default(now())
+  currentPeriodEnd  DateTime?
+  // RG-72 : lecture seule pendant 90 jours après expiration
+  readOnlyUntil     DateTime?
+  provider          String?
+  providerRef       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+}
+
+model Payment {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  organizationId String        @db.Uuid
+  subscriptionId String        @db.Uuid
+  amountMinor    BigInt
+  currency       Currency      @default(XOF)
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  provider       String
+  providerRef    String?
+  idempotencyKey String        @unique // RG-75
+  receiptKey     String? // Reçu PDF (RG-77), conservé 10 ans (OHADA)
+  rawWebhook     Json? // Dernière notification vérifiée (RG-74)
+  confirmedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@unique([provider, providerRef])
+  @@index([organizationId])
+}
+
+model UsageRecord {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  organizationId String    @db.Uuid
+  type           UsageType
+  quantity       BigInt
+  period         String // AAAA-MM
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, type, period])
+}
+
+// ---------------------------------------------------------------------------
+// IA, audit, notifications (§8, §4.12, §4.11)
+// ---------------------------------------------------------------------------
+
+model AIGeneration {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  organizationId String           @db.Uuid
+  brandId        String?          @db.Uuid
+  type           AIGenerationType
+  provider       String
+  model          String
+  status         JobStatus        @default(QUEUED)
+  inputHash      String? // Cache des résultats identiques (§8.4)
+  output         Json?
+  costMicroXof   BigInt           @default(0)
+  durationMs     Int?
+  error          String?
+  // Échec ou délai dépassé : le quota n'est pas consommé (§8.5)
+  quotaCharged   Boolean          @default(false)
+  reported       Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([inputHash])
+}
+
+// Exports (§4.4 US-31, §4.5 US-40) : traités en tâche de fond (§7), fichier en
+// stockage objet, téléchargé par lien signé valable 15 minutes (§9.1).
+model Export {
+  id             String     @id @default(uuid(7)) @db.Uuid
+  organizationId String     @db.Uuid
+  // Facultatif : une facture peut être exportée avant la création de la marque
+  brandId        String?    @db.Uuid
+  // Création exportée (carte de visite…), le cas échéant
+  designId       String?    @db.Uuid
+  // Facture, devis ou avoir exporté, le cas échéant
+  documentId     String?    @db.Uuid
+  type           ExportType
+  status         JobStatus  @default(QUEUED)
+  brandVersion   Int
+  // Offre Gratuite : PNG avec filigrane, sans SVG (§6.2)
+  watermarked    Boolean
+  includesVector Boolean
+  storageKey     String?
+  fileName       String?
+  mimeType       String?
+  sizeBytes      BigInt?
+  error          String?
+  // Compté dans le quota d'exports dès la demande ; rendu en cas d'échec
+  quotaCharged   Boolean    @default(true)
+  createdById    String?    @db.Uuid
+  createdAt      DateTime   @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  brand        Brand?       @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  design       Design?      @relation(fields: [designId], references: [id], onDelete: SetNull)
+  document     BusinessDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+}
+
+model AuditLog {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  actorId        String?  @db.Uuid
+  organizationId String?  @db.Uuid
+  action         String
+  resourceType   String
+  resourceId     String?
+  // Jamais de mot de passe, jeton ou donnée personnelle inutile (§9.1)
+  metadata       Json     @default("{}")
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([actorId])
+}
+
+model Notification {
+  id          String              @id @default(uuid(7)) @db.Uuid
+  userId      String              @db.Uuid
+  type        String
+  channel     NotificationChannel @default(IN_APP)
+  content     Json
+  status      NotificationStatus  @default(PENDING)
+  createdAt   DateTime            @default(now())
+  readAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}

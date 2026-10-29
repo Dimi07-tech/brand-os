@@ -1,0 +1,57 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "NODE_ENV"
+  ],
+  "tasks": {
+    "generate": {
+      "cache": false
+    },
+    "build": {
+      "dependsOn": [
+        "^build",
+        "generate"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**"
+      ]
+    },
+    "dev": {
+      "dependsOn": [
+        "^build",
+        "generate"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^build",
+        "generate"
+      ]
+    },
+    "lint": {},
+    "test": {
+      "dependsOn": [
+        "^build",
+        "generate"
+      ]
+    }
+  },
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "REDIS_URL",
+    "WEB_ORIGIN",
+    "API_PORT",
+    "SMTP_URL",
+    "MAIL_FROM",
+    "PWNED_PASSWORD_CHECK",
+    "NEXT_PUBLIC_API_URL",
+    "FILE_SIGNING_SECRET",
+    "STORAGE_DRIVER",
+    "WORKERS_ENABLED",
+    "CHROMIUM_PATH"
+  ]
+}
